@@ -1,0 +1,37 @@
+# --- .NET / C# Base ---
+[Bb]in/
+[obj]/
+*.exe
+*.dll
+*.pdb
+*.user
+*.suo
+*.vspscc
+*.vssscc
+*.sln.docstates
+
+# --- NuGet Isolation ---
+# We ignore the local packages folder to keep the repo small.
+# The 'dotnet restore' command will recreate this folder 
+# using your nuget.config on any machine.
+packages/
+*.nupkg
+
+# --- IDEs & Editors ---
+.visualstudio/
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS Generated ---
+.DS_Store
+Thumbs.db
+
+# --- Voxel Engine Specifics ---
+# If you generate save files or logs during testing
+*.log
+/saves/
+/screenshots/
+obj/*
