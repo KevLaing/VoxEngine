@@ -14,10 +14,20 @@ using var window = Window.Create(options);
 GL gl = null!;
 IInputContext input = null!;
 Camera camera = new Camera(new Vector3(30, 20, 30), Vector3.Zero);
+float targetAlteredState = 0f;
+float currentAlteredState = 0f;
+
+void ToggleAlteredState() => targetAlteredState = targetAlteredState == 0f ? 1f : 0f;
 
 window.Load += () => {
     // Initialize Input
     input = window.CreateInput();
+    if (input.Keyboards.Count > 0)
+    {
+        input.Keyboards[0].KeyDown += (kb, key, code) => {
+            if (key == Key.Space) ToggleAlteredState();
+        };
+    }
 
     unsafe
     {
@@ -66,6 +76,13 @@ window.Load += () => {
 
         uniform float uAlteredState; // 0.0 to 1.0
         
+        // Helper to rotate hue while preserving value/saturation
+        vec3 hueShift(vec3 color, float hue) {
+            const vec3 k = vec3(0.57735);
+            float cosAngle = cos(hue);
+            return color * cosAngle + cross(k, color) * sin(hue) + k * dot(k, color) * (1.0 - cosAngle);
+        }
+
         void main() {
             // Base color determined by Voxel Type
             vec3 baseColor;
@@ -76,7 +93,8 @@ window.Load += () => {
             vec3 normalColor = baseColor * (0.5 + 0.5 * vGrowth); 
             normalColor = mix(normalColor, vec3(0.0, 0.0, 1.0), vMoisture * 0.5);
 
-            vec3 alteredColor = vec3(0.5, 0.1, 0.8); // Eerie Purple
+            // Debug: Shift the existing data along the color spectrum
+            vec3 alteredColor = hueShift(normalColor, uAlteredState * 6.28318);
             
             // Linear interpolation between palettes
             vec3 finalColor = mix(normalColor, alteredColor, uAlteredState);
@@ -186,10 +204,12 @@ window.Load += () => {
     window.Render += (double delta) => {
         gl.Clear(ClearBufferMask.ColorBufferBit);
         
-        // Simulate toggling the altered state with a sine wave for demo purposes
-        float intensity = (float)(Math.Sin(window.Time) * 0.5 + 0.5);
+        // Smoothly interpolate the state for visual feedback
+        float lerpSpeed = 5.0f;
+        currentAlteredState += (targetAlteredState - currentAlteredState) * (float)delta * lerpSpeed;
+
         int loc = gl.GetUniformLocation(program, "uAlteredState");
-        gl.Uniform1(loc, intensity);
+        gl.Uniform1(loc, currentAlteredState);
 
         // Camera Matrix
         var view = camera.GetViewMatrix();
