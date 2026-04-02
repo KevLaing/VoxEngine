@@ -5,7 +5,7 @@ namespace VoxEngine.Utils;
 public class Perlin
 {
     private int[] p = new int[512];
-    public Perlin(Random rand)
+    public Perlin(DeterministicRandom rand)
     {
         for (int i = 0; i < 256; i++) p[i] = i;
         for (int i = 0; i < 256; i++) {

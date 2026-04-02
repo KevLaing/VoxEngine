@@ -7,7 +7,8 @@ using VoxEngine.Utils; // Import our new namespace
 
 // 1. Setup Window Options
 var options = WindowOptions.Default;
-options.Size = new Silk.NET.Maths.Vector2D<int>(800, 600);
+options.Size = new Silk.NET.Maths.Vector2D<int>(1920, 1080);
+options.WindowState = WindowState.Fullscreen;
 options.Title = "Voxel Engine: Altered State Prototype";
 
 using var window = Window.Create(options);
@@ -16,22 +17,49 @@ IInputContext input = null!;
 Camera camera = new Camera(new Vector3(30, 20, 30), Vector3.Zero);
 float targetAlteredState = 0f;
 float currentAlteredState = 0f;
+Vector2 lastMousePos;
 
 void ToggleAlteredState() => targetAlteredState = targetAlteredState == 0f ? 1f : 0f;
 
 window.Load += () => {
     // Initialize Input
     input = window.CreateInput();
+    if (input.Mice.Count > 0)
+    {
+        var mouse = input.Mice[0];
+        mouse.Cursor.CursorMode = CursorMode.Disabled;
+        lastMousePos = new Vector2(mouse.Position.X, mouse.Position.Y);
+        mouse.MouseMove += (m, pos) =>
+        {
+            var delta = new Vector2(pos.X - lastMousePos.X, pos.Y - lastMousePos.Y);
+            lastMousePos = new Vector2(pos.X, pos.Y);
+            camera.OnMouseMove(delta);
+        };
+    }
+
     if (input.Keyboards.Count > 0)
     {
         input.Keyboards[0].KeyDown += (kb, key, code) => {
-            if (key == Key.Space) ToggleAlteredState();
+            if (key == Key.U) ToggleAlteredState();
         };
     }
 
     unsafe
     {
         gl = window.CreateOpenGL();
+
+        // Initialize the viewport to the actual window size
+        gl.Viewport(0, 0, (uint)window.Size.X, (uint)window.Size.Y);
+
+        // Fix: Enable Depth Testing so voxels render in the correct Z-order
+        gl.Enable(EnableCap.DepthTest);
+
+        // Enable Blending for transparent water
+        gl.Enable(EnableCap.Blend);
+        gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+
+        // Update viewport if the window is resized or resolution changes
+        window.FramebufferResize += s => gl.Viewport(0, 0, (uint)s.X, (uint)s.Y);
     
     // --- SHADER SOURCE ---
     // Vertex Shader: Basic positioning
@@ -46,11 +74,14 @@ window.Load += () => {
         flat out uint vType;
         flat out float vGrowth;
         flat out float vMoisture;
+        out float vWorldY;
 
         void main() { 
             // Vertex pos (-0.5 to 0.5) + Instance World Pos
             vec3 worldPos = aPos + aInstancePos; 
             gl_Position = uMVP * vec4(worldPos, 1.0); 
+
+            vWorldY = aInstancePos.y;
 
             // --- UNPACKING LOGIC ---
             // Type: Bottom 16 bits
@@ -73,6 +104,7 @@ window.Load += () => {
         flat in uint vType;
         flat in float vGrowth;
         flat in float vMoisture;
+        in float vWorldY;
 
         uniform float uAlteredState; // 0.0 to 1.0
         
@@ -86,15 +118,24 @@ window.Load += () => {
         void main() {
             // Base color determined by Voxel Type
             vec3 baseColor;
-            if (vType == 1u) baseColor = vec3(0.6, 0.4, 0.2); // Dirt/Soil
-            else baseColor = vec3(0.2, 0.6, 0.2);             // Grass
+
+            // Debug: Force white for everything below the water line (14.0)
+            if (vWorldY < 14.0) {
+                baseColor = vec3(1.0, 1.0, 1.0);
+            } else {
+                if (vType == 1u) baseColor = vec3(0.2, 0.6, 0.2);      // Grass
+                else if (vType == 2u) baseColor = vec3(0.6, 0.4, 0.2); // Dirt/Soil
+                else if (vType == 3u) baseColor = vec3(0.0, 0.3, 0.8); // Water
+                else if (vType == 4u) baseColor = vec3(0.9, 0.8, 0.5); // Sand
+                else baseColor = vec3(1.0, 1.0, 1.0);
+            }
 
             // Visualize Growth (Brightness) and Moisture (Blue Tint)
             vec3 normalColor = baseColor * (0.5 + 0.5 * vGrowth); 
             normalColor = mix(normalColor, vec3(0.0, 0.0, 1.0), vMoisture * 0.5);
 
             // Debug: Shift the existing data along the color spectrum
-            vec3 alteredColor = hueShift(normalColor, uAlteredState * 6.28318);
+            vec3 alteredColor = hueShift(normalColor, uAlteredState * 3.14159);
             
             // Linear interpolation between palettes
             vec3 finalColor = mix(normalColor, alteredColor, uAlteredState);
@@ -104,7 +145,10 @@ window.Load += () => {
                 finalColor *= 0.8 + 0.2 * sin(uAlteredState * 5.0);
             }
             
-            FragColor = vec4(finalColor, 1.0);
+            // Set Alpha: 0.6 for Water, 1.0 for everything else
+            float alpha = (vType == 3u) ? 0.6 : 1.0;
+            
+            FragColor = vec4(finalColor, alpha);
         }";
 
     // --- COMPILE & LINK ---
@@ -119,8 +163,8 @@ window.Load += () => {
     // --- GEOMETRY GENERATION ---
     // 1. Mesh (Simple Cube, size 1.0)
     float[] vertices = {
-        -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f, // Back
-        -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f, // Front
+        -0.25f, -0.25f, -0.25f,  0.25f, -0.25f, -0.25f,  0.25f,  0.25f, -0.25f, -0.25f,  0.25f, -0.25f, // Back
+        -0.25f, -0.25f,  0.25f,  0.25f, -0.25f,  0.25f,  0.25f,  0.25f,  0.25f, -0.25f,  0.25f,  0.25f, // Front
     };
     uint[] indices = {
         0, 1, 2, 2, 3, 0,       // Back
@@ -131,39 +175,31 @@ window.Load += () => {
         4, 5, 1, 1, 0, 4        // Bottom
     };
 
-    // 2. Generate 3D Chunk (Instances)
-    int gridSize = 32;
+    // 2. Initialize World Manager
+    var world = new World(DateOnly.FromDateTime(DateTime.Now).DayNumber);
+    world.Update(camera.Position);
+
+    // Temporary: Collect initial data to setup buffers
+    // In a final engine, you'd use a dynamic buffer or separate VAOs per chunk.
     var posList = new List<float>();
     var dataList = new List<uint>();
-
-    // Deterministic Random & Noise
-    var random = new Random(1337); // Fixed seed
-    var perlin = new Perlin(random);
-
-    for (int x = 0; x < gridSize; x++)
+    foreach (var chunk in world.GetActiveChunks())
     {
-        for (int z = 0; z < gridSize; z++)
+        for (int x = 0; x < Chunk.SizeX; x++)
         {
-            // Use Noise to determine terrain height (Heightmap)
-            // Map noise (-1 to 1) to height (1 to 10)
-            double nHeight = perlin.Noise(x * 0.1, z * 0.1, 0.0);
-            int height = (int)((nHeight * 0.5 + 0.5) * 10) + 2;
-
-            for (int y = 0; y < height; y++)
+            for (int z = 0; z < Chunk.SizeZ; z++)
             {
-                posList.Add(x - gridSize / 2f);
-                posList.Add(y - 5f);
-                posList.Add(z - gridSize / 2f);
+                for (int y = 0; y < Chunk.Height; y++)
+                {
+                    Voxel voxel = chunk.Voxels[x + Chunk.SizeX * (y + Chunk.Height * z)];
+                    if (voxel.Data == 0) continue; // Skip empty/air voxels
 
-                // Logic: Top block is Grass (0), below is Dirt (1)
-                uint type = (y == height - 1) ? 0u : 1u;
-            
-                // 3D Noise for variation
-                double n3d = perlin.Noise(x * 0.15, y * 0.15, z * 0.15);
-                uint growth = (uint)((Math.Sin(n3d * 10) * 0.5 + 0.5) * 255);
-                uint moisture = (uint)((n3d * 0.5 + 0.5) * 255);
-
-                dataList.Add(new Voxel(type, growth, moisture).Data);
+                    // Scale instance positions by 0.5 to pack them tighter
+                    posList.Add((chunk.ChunkX * Chunk.SizeX + x) * 0.5f);
+                    posList.Add(y * 0.5f);
+                    posList.Add((chunk.ChunkZ * Chunk.SizeZ + z) * 0.5f);
+                    dataList.Add(voxel.Data);
+                }
             }
         }
     }
@@ -202,7 +238,8 @@ window.Load += () => {
 
     // --- RENDER LOOP ---
     window.Render += (double delta) => {
-        gl.Clear(ClearBufferMask.ColorBufferBit);
+        // Fix: Clear both Color AND Depth buffers every frame
+        gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         
         // Smoothly interpolate the state for visual feedback
         float lerpSpeed = 5.0f;
@@ -213,10 +250,12 @@ window.Load += () => {
 
         // Camera Matrix
         var view = camera.GetViewMatrix();
-        var proj = Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4f, 800f / 600f, 0.1f, 100f);
+        // Set FOV to 75 degrees (converted to radians) for a natural perspective
+        var proj = Matrix4x4.CreatePerspectiveFieldOfView(75f * (MathF.PI / 180f), (float)window.Size.X / window.Size.Y, 0.1f, 100f);
         var mvp = view * proj;
 
         int uMVP = gl.GetUniformLocation(program, "uMVP");
+        // Transpose set to false per local coordinate system requirements
         gl.UniformMatrix4(uMVP, 1, false, (float*)&mvp);
 
         gl.BindVertexArray(vertexArrayOutput);
