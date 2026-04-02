@@ -3,6 +3,7 @@ using Silk.NET.Windowing;
 using Silk.NET.Input;
 using System.Numerics; // Required for Matrix4x4
 using System.Drawing;
+using System.IO;
 using VoxEngine.Utils; // Import our new namespace
 
 // 1. Setup Window Options
@@ -61,95 +62,9 @@ window.Load += () => {
         // Update viewport if the window is resized or resolution changes
         window.FramebufferResize += s => gl.Viewport(0, 0, (uint)s.X, (uint)s.Y);
     
-    // --- SHADER SOURCE ---
-    // Vertex Shader: Basic positioning
-    const string vShaderSource = @"
-        #version 330 core
-        layout (location = 0) in vec3 aPos;         // Mesh Vertex
-        layout (location = 1) in vec3 aInstancePos; // Instanced World Position
-        layout (location = 2) in uint aVoxelData;   // Packed Voxel Data
-
-        uniform mat4 uMVP; // Model-View-Projection Matrix
-
-        flat out uint vType;
-        flat out float vGrowth;
-        flat out float vMoisture;
-        out float vWorldY;
-
-        void main() { 
-            // Vertex pos (-0.5 to 0.5) + Instance World Pos
-            vec3 worldPos = aPos + aInstancePos; 
-            gl_Position = uMVP * vec4(worldPos, 1.0); 
-
-            vWorldY = aInstancePos.y;
-
-            // --- UNPACKING LOGIC ---
-            // Type: Bottom 16 bits
-            vType = aVoxelData & 0xFFFFu;
-            
-            // Growth: Next 8 bits (Shift right 16, mask 0xFF)
-            uint growthRaw = (aVoxelData >> 16) & 0xFFu;
-            vGrowth = float(growthRaw) / 255.0; // Normalize 0..1
-
-            // Moisture: Top 8 bits (Shift right 24, mask 0xFF)
-            uint moistureRaw = (aVoxelData >> 24) & 0xFFu;
-            vMoisture = float(moistureRaw) / 255.0; // Normalize 0..1
-        }";
-
-    // Fragment Shader: The "Altered State" Logic
-    const string fShaderSource = @"
-        #version 330 core
-        out vec4 FragColor;
-        
-        flat in uint vType;
-        flat in float vGrowth;
-        flat in float vMoisture;
-        in float vWorldY;
-
-        uniform float uAlteredState; // 0.0 to 1.0
-        
-        // Helper to rotate hue while preserving value/saturation
-        vec3 hueShift(vec3 color, float hue) {
-            const vec3 k = vec3(0.57735);
-            float cosAngle = cos(hue);
-            return color * cosAngle + cross(k, color) * sin(hue) + k * dot(k, color) * (1.0 - cosAngle);
-        }
-
-        void main() {
-            // Base color determined by Voxel Type
-            vec3 baseColor;
-
-            // Debug: Force white for everything below the water line (14.0)
-            if (vWorldY < 14.0) {
-                baseColor = vec3(1.0, 1.0, 1.0);
-            } else {
-                if (vType == 1u) baseColor = vec3(0.2, 0.6, 0.2);      // Grass
-                else if (vType == 2u) baseColor = vec3(0.6, 0.4, 0.2); // Dirt/Soil
-                else if (vType == 3u) baseColor = vec3(0.0, 0.3, 0.8); // Water
-                else if (vType == 4u) baseColor = vec3(0.9, 0.8, 0.5); // Sand
-                else baseColor = vec3(1.0, 1.0, 1.0);
-            }
-
-            // Visualize Growth (Brightness) and Moisture (Blue Tint)
-            vec3 normalColor = baseColor * (0.5 + 0.5 * vGrowth); 
-            normalColor = mix(normalColor, vec3(0.0, 0.0, 1.0), vMoisture * 0.5);
-
-            // Debug: Shift the existing data along the color spectrum
-            vec3 alteredColor = hueShift(normalColor, uAlteredState * 3.14159);
-            
-            // Linear interpolation between palettes
-            vec3 finalColor = mix(normalColor, alteredColor, uAlteredState);
-            
-            // Add a subtle 'pulse' effect if in altered state
-            if(uAlteredState > 0.1) {
-                finalColor *= 0.8 + 0.2 * sin(uAlteredState * 5.0);
-            }
-            
-            // Set Alpha: 0.6 for Water, 1.0 for everything else
-            float alpha = (vType == 3u) ? 0.6 : 1.0;
-            
-            FragColor = vec4(finalColor, alpha);
-        }";
+        // Load shaders from files
+        string vShaderSource = File.ReadAllText("shaders/voxel.vert");
+        string fShaderSource = File.ReadAllText("shaders/voxel.frag");
 
     // --- COMPILE & LINK ---
     uint vShader = ShaderHelper.Compile(gl, vShaderSource, ShaderType.VertexShader);
