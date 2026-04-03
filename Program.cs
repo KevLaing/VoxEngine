@@ -21,6 +21,10 @@ float targetAlteredState = 0f;
 float currentAlteredState = 0f;
 Vector2 lastMousePos;
 World world = null!;
+float[] instancePositions = null!;
+uint[] instanceData = null!;
+uint instanceCount = 0;
+               
 bool worldDirty = true; // Flag to track if world data has changed
 void ToggleAlteredState() => targetAlteredState = targetAlteredState == 0f ? 1f : 0f;
 
@@ -82,8 +86,8 @@ window.Load += () =>
         // --- GEOMETRY GENERATION ---
         // 1. Mesh (Simple Cube, size 1.0)
         float[] vertices = {
-        -0.25f, -0.25f, -0.25f,  0.25f, -0.25f, -0.25f,  0.25f,  0.25f, -0.25f, -0.25f,  0.25f, -0.25f, // Back
-        -0.25f, -0.25f,  0.25f,  0.25f, -0.25f,  0.25f,  0.25f,  0.25f,  0.25f, -0.25f,  0.25f,  0.25f, // Front
+        -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f, // Back
+        -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f, // Front
     };
         uint[] indices = {
         0, 1, 2, 2, 3, 0,       // Back
@@ -135,32 +139,56 @@ window.Load += () =>
             gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             // Temporary: Collect initial data to setup buffers
             // In a final engine, you'd use a dynamic buffer or separate VAOs per chunk.
-            var posList = new List<float>();
-            var dataList = new List<uint>();
-            foreach (var chunk in world.GetActiveChunks())
+            if (worldDirty)
             {
-                for (int x = 0; x < Chunk.SizeX; x++)
+                var posList = new List<float>();
+                var dataList = new List<uint>();
+                foreach (var chunk in world.GetActiveChunks())
                 {
-                    for (int z = 0; z < Chunk.SizeZ; z++)
+                    for (int x = 0; x < Chunk.SizeX; x++)
                     {
-                        for (int y = 0; y < Chunk.Height; y++)
+                        for (int z = 0; z < Chunk.SizeZ; z++)
                         {
-                            Voxel voxel = chunk.Voxels[x + Chunk.SizeX * (y + Chunk.Height * z)];
-                            if (voxel.Data == 0) continue; // Skip empty/air voxels
+                            for (int y = 0; y < Chunk.Height; y++)
+                            {
+                                Voxel voxel = chunk.Voxels[x + Chunk.SizeX * (y + Chunk.Height * z)];
+                                if (voxel.Data == 0) continue; // Skip empty/air voxels
 
-                            // Scale instance positions by 0.5 to pack them tighter
-                            posList.Add((chunk.ChunkX * Chunk.SizeX + x) * 0.5f);
-                            posList.Add(y * 0.5f);
-                            posList.Add((chunk.ChunkZ * Chunk.SizeZ + z) * 0.5f);
-                            dataList.Add(voxel.Data);
+                                // Scale instance positions by 0.5 to pack them tighter
+                                posList.Add((chunk.ChunkX * Chunk.SizeX + x));
+                                posList.Add(y );
+                                posList.Add((chunk.ChunkZ * Chunk.SizeZ + z));
+                                dataList.Add(voxel.Data);
+                            }
                         }
                     }
                 }
+                instancePositions = posList.ToArray();
+                instanceData = dataList.ToArray();
+                instanceCount = (uint)instanceData.Length;
+                gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBufferOutputPos);
+                fixed (float* p = instancePositions)
+                {
+                    gl.BufferData(
+                        BufferTargetARB.ArrayBuffer,
+                        (nuint)(instancePositions.Length * sizeof(float)),
+                        p,
+                        BufferUsageARB.DynamicDraw);
+                }
+
+                gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBufferOutputData);
+                fixed (uint* d = instanceData)
+                {
+                    gl.BufferData(
+                        BufferTargetARB.ArrayBuffer,
+                        (nuint)(instanceData.Length * sizeof(uint)),
+                        d,
+                        BufferUsageARB.DynamicDraw);
+                }
+                worldDirty = false;
             }
 
-            float[] instancePositions = posList.ToArray();
-            uint[] instanceData = dataList.ToArray();
-            uint instanceCount = (uint)instanceData.Length;
+
             // Smoothly interpolate the state for visual feedback
             float lerpSpeed = 5.0f;
             currentAlteredState += (targetAlteredState - currentAlteredState) * (float)delta * lerpSpeed;
@@ -180,26 +208,7 @@ window.Load += () =>
 
             gl.BindVertexArray(vertexArrayOutput);
 
-            gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBufferOutputPos);
-            fixed (float* p = instancePositions)
-            {
-                gl.BufferData(
-                    BufferTargetARB.ArrayBuffer,
-                    (nuint)(instancePositions.Length * sizeof(float)),
-                    p,
-                    BufferUsageARB.DynamicDraw);
-            }
 
-            gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBufferOutputData);
-            fixed (uint* d = instanceData)
-            {
-                gl.BufferData(
-                    BufferTargetARB.ArrayBuffer,
-                    (nuint)(instanceData.Length * sizeof(uint)),
-                    d,
-                    BufferUsageARB.DynamicDraw);
-            }
-            worldDirty = false;
             // Instanced Draw: 36 indices per cube
             gl.DrawElementsInstanced(PrimitiveType.Triangles, 36, DrawElementsType.UnsignedInt, (void*)0, instanceCount);
         };
@@ -216,7 +225,7 @@ window.Update += (double delta) =>
     bool changed = world.Update(camera.Position);
 
     if (changed)
-        worldDirty = true;    
+        worldDirty = true;
 };
 
 window.Run();
