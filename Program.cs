@@ -122,7 +122,6 @@ window.Load += () =>
         {
             gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            // Camera
             var view = camera.GetViewMatrix();
             var proj = Matrix4x4.CreatePerspectiveFieldOfView(
                 75f * (MathF.PI / 180f),
@@ -130,14 +129,25 @@ window.Load += () =>
                 0.1f,
                 175f);
 
-            var mvp = view * proj;
+            // Keep the same convention you're already rendering with.
+            var viewProj = view * proj;
 
             int uMVP = gl.GetUniformLocation(program, "uMVP");
-            gl.UniformMatrix4(uMVP, 1, false, (float*)&mvp);
+            gl.UniformMatrix4(uMVP, 1, false, (float*)&viewProj);
 
-            // Render chunks
+            int visibleChunks = 0;
+            int culledChunks = 0;
+
             foreach (var chunk in world.GetActiveChunks())
             {
+                if (!FrustumCuller.IntersectsAabb(viewProj, chunk.BoundsMin, chunk.BoundsMax))
+                {
+                    culledChunks++;
+                    continue;
+                }
+
+                visibleChunks++;
+
                 if (chunk.IsDirty)
                     chunk.BuildMesh(gl, cubeVBO, sharedEBO);
 
@@ -145,7 +155,6 @@ window.Load += () =>
                     continue;
 
                 gl.BindVertexArray(chunk.VAO);
-
                 gl.DrawElementsInstanced(
                     PrimitiveType.Triangles,
                     36,
@@ -154,12 +163,14 @@ window.Load += () =>
                     chunk.InstanceCount);
             }
 
-            // Altered state
             float lerpSpeed = 5.0f;
             currentAlteredState += (targetAlteredState - currentAlteredState) * (float)delta * lerpSpeed;
 
             int loc = gl.GetUniformLocation(program, "uAlteredState");
             gl.Uniform1(loc, currentAlteredState);
+
+            // Temporary debug:
+             Console.WriteLine($"Visible: {visibleChunks}, Culled: {culledChunks}");
         };
     }
 };
