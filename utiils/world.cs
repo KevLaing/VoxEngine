@@ -50,4 +50,21 @@ public class World
     }
 
     public IEnumerable<Chunk> GetActiveChunks() => _loadedChunks.Values;
+
+    public bool IsSolid(Vector3 pos)
+    {
+        int cx = (int)Math.Floor(pos.X / 16); // Assuming Chunk.SizeX is 16
+        int cz = (int)Math.Floor(pos.Z / 16); // Assuming Chunk.SizeZ is 16
+
+        if (_loadedChunks.TryGetValue((cx, cz), out var chunk))
+        {
+            // Replace with your actual chunk block access logic
+            // return chunk.GetBlockAt(pos).IsSolid;
+            return false; 
+        }
+
+        // If chunk isn't loaded, treat as solid (to prevent falling through the void) 
+        // or air depending on your preference.
+        return false;
+    }
 }
