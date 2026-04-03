@@ -23,28 +23,6 @@ public class World
         var dataList = new List<uint>();
         _instancePositions = posList.ToArray();
         _instanceData = dataList.ToArray();
-        foreach (var chunk in GetActiveChunks())
-    {
-        for (int x = 0; x < Chunk.SizeX; x++)
-        {
-            for (int z = 0; z < Chunk.SizeZ; z++)
-            {
-                for (int y = 0; y < Chunk.Height; y++)
-                {
-                    Voxel voxel = chunk.Voxels[x + Chunk.SizeX * (y + Chunk.Height * z)];
-                    if (voxel.Data == 0) continue; // Skip empty/air voxels
-
-                    // Scale instance positions by 0.5 to pack them tighter
-                    posList.Add((chunk.ChunkX * Chunk.SizeX + x) * 0.5f);
-                    posList.Add(y * 0.5f);
-                    posList.Add((chunk.ChunkZ * Chunk.SizeZ + z) * 0.5f);
-                    dataList.Add(voxel.Data);
-                    
-                    Console.WriteLine($"Added voxel at ({chunk.ChunkX * Chunk.SizeX + x}, {y}, {chunk.ChunkZ * Chunk.SizeZ + z}) with type {voxel.Data}");
-                }
-            }
-        }
-    }
     }
 
     public bool Update(Vector3 playerPos)
@@ -87,13 +65,23 @@ public class World
 
     public bool IsSolid(Vector3 pos)
     {
-        int cx = (int)Math.Floor(pos.X / 16); // Assuming Chunk.SizeX is 16
-        int cz = (int)Math.Floor(pos.Z / 16); // Assuming Chunk.SizeZ is 16
+        int cx = (int)Math.Floor(pos.X / Chunk.SizeX);
+        int cz = (int)Math.Floor(pos.Z / Chunk.SizeZ);
 
         if (_loadedChunks.TryGetValue((cx, cz), out var chunk))
         {
-            // Replace with your actual chunk block access logic
-            // return chunk.GetBlockAt(pos).IsSolid;
+            int lx = (int)Math.Floor(pos.X) % Chunk.SizeX;
+            int ly = (int)Math.Floor(pos.Y);
+            int lz = (int)Math.Floor(pos.Z) % Chunk.SizeZ;
+            
+            if (lx < 0) lx += Chunk.SizeX;
+            if (lz < 0) lz += Chunk.SizeZ;
+
+            if (ly >= 0 && ly < Chunk.Height)
+            {
+                var voxel = chunk.Voxels[lx + Chunk.SizeX * (ly + Chunk.Height * lz)];
+                return voxel.Data != 0; // Solid if not air
+            }
             return false; 
         }
 

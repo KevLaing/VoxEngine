@@ -50,7 +50,7 @@ public class Camera
     public void OnUpdate(double deltaTime, IKeyboard keyboard)
     {
         float moveSpeed = _speed * (float)deltaTime;
-        
+        if (keyboard.IsKeyPressed(Key.ShiftLeft)) moveSpeed *=3;
         // Calculate Right vector for strafing
         var right = Vector3.Normalize(Vector3.Cross(Front, Up));
 
@@ -64,6 +64,7 @@ public class Camera
 
         // Elevation
         if (keyboard.IsKeyPressed(Key.E)) Position += Up * moveSpeed;
-        if (keyboard.IsKeyPressed(Key.ShiftLeft)) Position -= Up * moveSpeed;
+        if (keyboard.IsKeyPressed(Key.Space)) Position -= Up * moveSpeed;
+        
     }
 }

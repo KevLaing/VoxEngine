@@ -38,106 +38,92 @@ public class Chunk
 
         Generate(noise, rand);
     }
-    public unsafe void BuildMesh(GL gl, float[] cubeVertices, uint[] indices)
-{
-    var posList = new List<float>();
-    var dataList = new List<uint>();
-
-    for (int x = 0; x < SizeX; x++)
-        for (int z = 0; z < SizeZ; z++)
-            for (int y = 0; y < Height; y++)
-            {
-                var voxel = Voxels[x + SizeX * (y + Height * z)];
-                if (voxel.Data == 0) continue;
-
-                posList.Add(ChunkX * SizeX + x);
-                posList.Add(y);
-                posList.Add(ChunkZ * SizeZ + z);
-                dataList.Add(voxel.Data);
-            }
-
-    InstanceCount = (uint)dataList.Count;
-    Console.WriteLine($"Chunk {ChunkX},{ChunkZ} instances: {InstanceCount}");
-    // 🔴 If nothing to draw, skip GPU work
-    if (InstanceCount == 0)
+    public unsafe void BuildMesh(GL gl, uint cubeVBO, uint sharedEBO)
     {
-        IsDirty = false;
-        return;
-    }
+        var posList = new List<float>();
+        var dataList = new List<uint>();
 
-    if (VAO == 0)
-    {
-        VAO = gl.GenVertexArray();
+        for (int x = 0; x < SizeX; x++)
+            for (int z = 0; z < SizeZ; z++)
+                for (int y = 0; y < Height; y++)
+                {
+                    var voxel = Voxels[x + SizeX * (y + Height * z)];
+                    if (voxel.Data == 0) continue;
+
+                    posList.Add(ChunkX * SizeX + x);
+                    posList.Add(y);
+                    posList.Add(ChunkZ * SizeZ + z);
+                    dataList.Add(voxel.Data);
+                }
+
+        InstanceCount = (uint)dataList.Count;
+        //Console.WriteLine($"Chunk {ChunkX},{ChunkZ} instances: {InstanceCount}");
+
+        if (InstanceCount == 0)
+        {
+            IsDirty = false;
+            return;
+        }
+
+        // ✅ Create VAO ONCE per chunk
+        if (VAO == 0)
+        {
+            VAO = gl.GenVertexArray();
+            gl.BindVertexArray(VAO);
+
+            // Bind the shared mesh VAO’s EBO to this chunk VAO
+            gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, sharedEBO);
+
+            // --- Geometry buffer (Attribute 0) ---
+            gl.BindBuffer(BufferTargetARB.ArrayBuffer, cubeVBO);
+            gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
+            gl.EnableVertexAttribArray(0);
+
+            // --- Instance position buffer ---
+            InstanceVBO = gl.GenBuffer();
+            gl.BindBuffer(BufferTargetARB.ArrayBuffer, InstanceVBO);
+            gl.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
+            gl.VertexAttribDivisor(1, 1);
+            gl.EnableVertexAttribArray(1);
+
+            // --- Instance data buffer ---
+            DataVBO = gl.GenBuffer();
+            gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
+            gl.VertexAttribIPointer(2, 1, VertexAttribIType.UnsignedInt, sizeof(uint), (void*)0);
+            gl.VertexAttribDivisor(2, 1);
+            gl.EnableVertexAttribArray(2);
+        }
+
         gl.BindVertexArray(VAO);
 
-        // ✅ Create and bind vertex buffer (cube mesh)
-        uint vertexVBO = gl.GenBuffer();
-        gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexVBO);
-        fixed (float* v = cubeVertices)
+        // Upload positions
+        var posArray = posList.ToArray();
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, InstanceVBO);
+        fixed (float* p = posArray)
         {
             gl.BufferData(
                 BufferTargetARB.ArrayBuffer,
-                (nuint)(cubeVertices.Length * sizeof(float)),
-                v,
-                BufferUsageARB.StaticDraw);
+                (nuint)(posArray.Length * sizeof(float)),
+                p,
+                BufferUsageARB.DynamicDraw);
         }
 
-        gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
-        gl.EnableVertexAttribArray(0);
-
-        // ✅ Create and bind EBO (IMPORTANT: bind to VAO)
-        uint ebo = gl.GenBuffer();
-        gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, ebo);
-        fixed (uint* i = indices)
+        // Upload voxel data
+        var dataArray = dataList.ToArray();
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
+        fixed (uint* d = dataArray)
         {
             gl.BufferData(
-                BufferTargetARB.ElementArrayBuffer,
-                (nuint)(indices.Length * sizeof(uint)),
-                i,
-                BufferUsageARB.StaticDraw);
+                BufferTargetARB.ArrayBuffer,
+                (nuint)(dataArray.Length * sizeof(uint)),
+                d,
+                BufferUsageARB.DynamicDraw);
         }
 
-        // ✅ Instance position buffer
-        InstanceVBO = gl.GenBuffer();
-        gl.BindBuffer(BufferTargetARB.ArrayBuffer, InstanceVBO);
-        gl.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
-        gl.VertexAttribDivisor(1, 1);
-        gl.EnableVertexAttribArray(1);
-
-        // ✅ Instance data buffer (UINT)
-        DataVBO = gl.GenBuffer();
-        gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
-        gl.VertexAttribIPointer(2, 1, VertexAttribIType.UnsignedInt, sizeof(uint), (void*)0);
-        gl.VertexAttribDivisor(2, 1);
-        gl.EnableVertexAttribArray(2);
+        IsDirty = false;
     }
 
-    gl.BindVertexArray(VAO);
-
-    // ✅ Upload instance positions
-    gl.BindBuffer(BufferTargetARB.ArrayBuffer, InstanceVBO);
-    fixed (float* p = posList.ToArray())
-    {
-        gl.BufferData(
-            BufferTargetARB.ArrayBuffer,
-            (nuint)(posList.Count * sizeof(float)),
-            p,
-            BufferUsageARB.DynamicDraw);
-    }
-
-    // ✅ Upload voxel data
-    gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
-    fixed (uint* d = dataList.ToArray())
-    {
-        gl.BufferData(
-            BufferTargetARB.ArrayBuffer,
-            (nuint)(dataList.Count * sizeof(uint)),
-            d,
-            BufferUsageARB.DynamicDraw);
-    }
-
-    IsDirty = false;
-}    private void Generate(Perlin noise, DeterministicRandom rand)
+    private void Generate(Perlin noise, DeterministicRandom rand)
     {
         int waterLevel = 28; // Doubled to match new resolution
 
