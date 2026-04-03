@@ -51,6 +51,41 @@ public class World
 
         return chunk.Voxels[localX + Chunk.SizeX * (worldY + Chunk.Height * localZ)].Data != 0;
     }
+
+    public bool IntersectsSolidAabb(Vector3 min, Vector3 max)
+    {
+        int minX = (int)MathF.Floor(min.X);
+        int minY = (int)MathF.Floor(min.Y);
+        int minZ = (int)MathF.Floor(min.Z);
+        int maxX = (int)MathF.Ceiling(max.X) - 1;
+        int maxY = (int)MathF.Ceiling(max.Y) - 1;
+        int maxZ = (int)MathF.Ceiling(max.Z) - 1;
+
+        for (int x = minX; x <= maxX; x++)
+        {
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    if (IsSolid(x, y, z))
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public int FindSurfaceY(int worldX, int worldZ)
+    {
+        for (int y = Chunk.Height - 1; y >= 0; y--)
+        {
+            if (IsSolid(worldX, y, worldZ))
+                return y;
+        }
+
+        return 0;
+    }
     public bool Update(Vector3 playerPos, GL gl)
     {
         int pCx = (int)Math.Floor(playerPos.X / Chunk.SizeX);

@@ -2,23 +2,22 @@ using System;
 using System.Numerics;
 using Silk.NET.Input;
 using Silk.NET.Windowing;
-using VoxEngine.Utils;
 
 namespace VoxEngine;
 
 public sealed class InputController : IDisposable
 {
     private readonly IWindow _window;
-    private readonly Camera _camera;
     private readonly Action _toggleAlteredState;
 
     private IInputContext? _input;
     private Vector2 _lastMousePosition;
+    private Vector2 _accumulatedLookDelta;
+    private bool _jumpPressed;
 
-    public InputController(IWindow window, Camera camera, Action toggleAlteredState)
+    public InputController(IWindow window, Action toggleAlteredState)
     {
         _window = window;
-        _camera = camera;
         _toggleAlteredState = toggleAlteredState;
     }
 
@@ -40,12 +39,36 @@ public sealed class InputController : IDisposable
         }
     }
 
-    public void Update(double delta)
+    public PlayerInput BuildPlayerInput()
     {
         if (_input is null || _input.Keyboards.Count == 0)
-            return;
+            return default;
 
-        _camera.OnUpdate(delta, _input.Keyboards[0]);
+        IKeyboard keyboard = _input.Keyboards[0];
+        float moveForward = 0f;
+        float moveRight = 0f;
+
+        if (keyboard.IsKeyPressed(Key.W))
+            moveForward += 1f;
+        if (keyboard.IsKeyPressed(Key.S))
+            moveForward -= 1f;
+        if (keyboard.IsKeyPressed(Key.D))
+            moveRight += 1f;
+        if (keyboard.IsKeyPressed(Key.A))
+            moveRight -= 1f;
+
+        PlayerInput input = new()
+        {
+            MoveForward = moveForward,
+            MoveRight = moveRight,
+            JumpPressed = _jumpPressed,
+            SprintHeld = keyboard.IsKeyPressed(Key.ShiftLeft),
+            LookDelta = _accumulatedLookDelta,
+        };
+
+        _jumpPressed = false;
+        _accumulatedLookDelta = Vector2.Zero;
+        return input;
     }
 
     private void OnMouseMove(IMouse mouse, System.Numerics.Vector2 position)
@@ -53,13 +76,15 @@ public sealed class InputController : IDisposable
         Vector2 currentPosition = new(position.X, position.Y);
         Vector2 delta = currentPosition - _lastMousePosition;
         _lastMousePosition = currentPosition;
-        _camera.OnMouseMove(delta);
+        _accumulatedLookDelta += delta;
     }
 
     private void OnKeyDown(IKeyboard keyboard, Key key, int code)
     {
         if (key == Key.U)
             _toggleAlteredState();
+        else if (key == Key.Space)
+            _jumpPressed = true;
     }
 
     public void Dispose()
