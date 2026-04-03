@@ -24,7 +24,7 @@ World world = null!;
 float[] instancePositions = null!;
 uint[] instanceData = null!;
 uint instanceCount = 0;
-               
+
 bool worldDirty = true; // Flag to track if world data has changed
 void ToggleAlteredState() => targetAlteredState = targetAlteredState == 0f ? 1f : 0f;
 
@@ -101,7 +101,7 @@ window.Load += () =>
         // 2. Initialize World Manager
         world = new World(DateOnly.FromDateTime(DateTime.Now).DayNumber);
         world.Update(camera.Position);
-        worldDirty = false; // Initial load done, reset dirty flag
+        worldDirty = true; // Initial load done, reset dirty flag
 
 
         uint vertexArrayOutput = gl.GenVertexArray();
@@ -139,53 +139,32 @@ window.Load += () =>
             gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             // Temporary: Collect initial data to setup buffers
             // In a final engine, you'd use a dynamic buffer or separate VAOs per chunk.
-            if (worldDirty)
+             // Camera Matrix
+            var view = camera.GetViewMatrix();
+            // Set FOV to 75 degrees (converted to radians) for a natural perspective
+            var proj = Matrix4x4.CreatePerspectiveFieldOfView(75f * (MathF.PI / 180f), (float)window.Size.X / window.Size.Y, 0.1f, 100f);
+            var mvp = view * proj;
+
+            int uMVP = gl.GetUniformLocation(program, "uMVP");
+            // Transpose set to false per local coordinate system requirements
+            gl.UniformMatrix4(uMVP, 1, false, (float*)&mvp);
+
+            foreach (var chunk in world.GetActiveChunks())
             {
-                var posList = new List<float>();
-                var dataList = new List<uint>();
-                foreach (var chunk in world.GetActiveChunks())
-                {
-                    for (int x = 0; x < Chunk.SizeX; x++)
-                    {
-                        for (int z = 0; z < Chunk.SizeZ; z++)
-                        {
-                            for (int y = 0; y < Chunk.Height; y++)
-                            {
-                                Voxel voxel = chunk.Voxels[x + Chunk.SizeX * (y + Chunk.Height * z)];
-                                if (voxel.Data == 0) continue; // Skip empty/air voxels
+                if (chunk.IsDirty)
+                    chunk.BuildMesh(gl, vertices, indices);
 
-                                // Scale instance positions by 0.5 to pack them tighter
-                                posList.Add((chunk.ChunkX * Chunk.SizeX + x));
-                                posList.Add(y );
-                                posList.Add((chunk.ChunkZ * Chunk.SizeZ + z));
-                                dataList.Add(voxel.Data);
-                            }
-                        }
-                    }
-                }
-                instancePositions = posList.ToArray();
-                instanceData = dataList.ToArray();
-                instanceCount = (uint)instanceData.Length;
-                gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBufferOutputPos);
-                fixed (float* p = instancePositions)
-                {
-                    gl.BufferData(
-                        BufferTargetARB.ArrayBuffer,
-                        (nuint)(instancePositions.Length * sizeof(float)),
-                        p,
-                        BufferUsageARB.DynamicDraw);
-                }
+                if (chunk.InstanceCount == 0)
+                    continue;
 
-                gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBufferOutputData);
-                fixed (uint* d = instanceData)
-                {
-                    gl.BufferData(
-                        BufferTargetARB.ArrayBuffer,
-                        (nuint)(instanceData.Length * sizeof(uint)),
-                        d,
-                        BufferUsageARB.DynamicDraw);
-                }
-                worldDirty = false;
+                gl.BindVertexArray(chunk.VAO);
+                gl.DrawElementsInstanced(
+                    PrimitiveType.Triangles,
+                    36,
+                    DrawElementsType.UnsignedInt,
+                    (void*)0,
+                    chunk.InstanceCount
+                );
             }
 
 
@@ -196,21 +175,11 @@ window.Load += () =>
             int loc = gl.GetUniformLocation(program, "uAlteredState");
             gl.Uniform1(loc, currentAlteredState);
 
-            // Camera Matrix
-            var view = camera.GetViewMatrix();
-            // Set FOV to 75 degrees (converted to radians) for a natural perspective
-            var proj = Matrix4x4.CreatePerspectiveFieldOfView(75f * (MathF.PI / 180f), (float)window.Size.X / window.Size.Y, 0.1f, 100f);
-            var mvp = view * proj;
-
-            int uMVP = gl.GetUniformLocation(program, "uMVP");
-            // Transpose set to false per local coordinate system requirements
-            gl.UniformMatrix4(uMVP, 1, false, (float*)&mvp);
-
-            gl.BindVertexArray(vertexArrayOutput);
+           
+       
 
 
-            // Instanced Draw: 36 indices per cube
-            gl.DrawElementsInstanced(PrimitiveType.Triangles, 36, DrawElementsType.UnsignedInt, (void*)0, instanceCount);
+          
         };
     }
 };
