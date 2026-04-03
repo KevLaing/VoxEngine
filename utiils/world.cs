@@ -12,7 +12,7 @@ public class World
 
     public  float[] _instancePositions;
     public  uint[] _instanceData;
-    public int RenderDistance = 4; // Chunks in each direction
+    public int RenderDistance = 6; // Chunks in each direction = (2n+1)^2 total
 
     public World(int seed)
     {
@@ -52,7 +52,7 @@ public class World
         int pCx = (int)Math.Floor(playerPos.X / Chunk.SizeX);
         int pCz = (int)Math.Floor(playerPos.Z / Chunk.SizeZ);
         bool changed = false;
-        Console.WriteLine($"Player is at chunk ({pCx}, {pCz})");
+        
         // Load chunks in range
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {

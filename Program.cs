@@ -137,12 +137,11 @@ window.Load += () =>
         {
             // Fix: Clear both Color AND Depth buffers every frame
             gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            // Temporary: Collect initial data to setup buffers
-            // In a final engine, you'd use a dynamic buffer or separate VAOs per chunk.
+            
              // Camera Matrix
             var view = camera.GetViewMatrix();
             // Set FOV to 75 degrees (converted to radians) for a natural perspective
-            var proj = Matrix4x4.CreatePerspectiveFieldOfView(75f * (MathF.PI / 180f), (float)window.Size.X / window.Size.Y, 0.1f, 100f);
+            var proj = Matrix4x4.CreatePerspectiveFieldOfView(75f * (MathF.PI / 180f), (float)window.Size.X / window.Size.Y, 0.1f, 150f);
             var mvp = view * proj;
 
             int uMVP = gl.GetUniformLocation(program, "uMVP");

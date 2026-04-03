@@ -57,7 +57,7 @@ public class Chunk
             }
 
     InstanceCount = (uint)dataList.Count;
-
+    Console.WriteLine($"Chunk {ChunkX},{ChunkZ} instances: {InstanceCount}");
     // 🔴 If nothing to draw, skip GPU work
     if (InstanceCount == 0)
     {
