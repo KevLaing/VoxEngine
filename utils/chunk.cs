@@ -24,6 +24,7 @@ public class Chunk
     public uint EBO;
     public uint IndexCount;
     public bool IsDirty = true;
+    public bool HasBuiltMesh => VAO != 0 && IndexCount > 0;
 
     //meshing helpers
 
@@ -264,6 +265,35 @@ public class Chunk
         }
 
         IsDirty = false;
+    }
+
+    public void ReleaseMesh(GL gl)
+    {
+        if (VAO != 0)
+        {
+            gl.DeleteVertexArray(VAO);
+            VAO = 0;
+        }
+
+        if (VertexVBO != 0)
+        {
+            gl.DeleteBuffer(VertexVBO);
+            VertexVBO = 0;
+        }
+
+        if (DataVBO != 0)
+        {
+            gl.DeleteBuffer(DataVBO);
+            DataVBO = 0;
+        }
+
+        if (EBO != 0)
+        {
+            gl.DeleteBuffer(EBO);
+            EBO = 0;
+        }
+
+        IndexCount = 0;
     }
 
 

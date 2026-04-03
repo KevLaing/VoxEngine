@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Silk.NET.OpenGL;
 
 namespace VoxEngine.Utils;
 
@@ -9,6 +10,13 @@ public class World
     private readonly Dictionary<(int, int), Chunk> _loadedChunks = new();
     private readonly Perlin _noise;
     private readonly int _seed;
+    private static readonly (int X, int Z)[] CardinalNeighborOffsets =
+    {
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+    };
 
     public float[] _instancePositions;
     public uint[] _instanceData;
@@ -43,7 +51,7 @@ public class World
 
         return chunk.Voxels[localX + Chunk.SizeX * (worldY + Chunk.Height * localZ)].Data != 0;
     }
-    public bool Update(Vector3 playerPos)
+    public bool Update(Vector3 playerPos, GL gl)
     {
         int pCx = (int)Math.Floor(playerPos.X / Chunk.SizeX);
         int pCz = (int)Math.Floor(playerPos.Z / Chunk.SizeZ);
@@ -58,15 +66,7 @@ public class World
 
                 if (!_loadedChunks.ContainsKey((cx, cz)))
                 {
-                    var chunk = new Chunk(cx, cz, _seed, _noise);
-                    chunk.IsDirty = true;
-                    _loadedChunks.Add((cx, cz), chunk);
-
-                    MarkNeighborDirty(cx - 1, cz);
-                    MarkNeighborDirty(cx + 1, cz);
-                    MarkNeighborDirty(cx, cz - 1);
-                    MarkNeighborDirty(cx, cz + 1);
-
+                    AddChunk(cx, cz);
                     changed = true;
                 }
             }
@@ -85,15 +85,38 @@ public class World
 
         foreach (var coord in toUnload)
         {
-            _loadedChunks.Remove(coord);
-
-            MarkNeighborDirty(coord.Item1 - 1, coord.Item2);
-            MarkNeighborDirty(coord.Item1 + 1, coord.Item2);
-            MarkNeighborDirty(coord.Item1, coord.Item2 - 1);
-            MarkNeighborDirty(coord.Item1, coord.Item2 + 1);
+            RemoveChunk(coord.Item1, coord.Item2, gl);
         }
 
         return changed;
+    }
+
+    private void AddChunk(int cx, int cz)
+    {
+        var chunk = new Chunk(cx, cz, _seed, _noise)
+        {
+            IsDirty = true
+        };
+
+        _loadedChunks.Add((cx, cz), chunk);
+        MarkCardinalNeighborsDirty(cx, cz);
+    }
+
+    private void RemoveChunk(int cx, int cz, GL gl)
+    {
+        if (!_loadedChunks.Remove((cx, cz), out Chunk? chunk))
+            return;
+
+        chunk.ReleaseMesh(gl);
+        MarkCardinalNeighborsDirty(cx, cz);
+    }
+
+    private void MarkCardinalNeighborsDirty(int cx, int cz)
+    {
+        foreach (var offset in CardinalNeighborOffsets)
+        {
+            MarkNeighborDirty(cx + offset.X, cz + offset.Z);
+        }
     }
 
     private void MarkNeighborDirty(int cx, int cz)
@@ -103,6 +126,14 @@ public class World
     }
 
     public IEnumerable<Chunk> GetActiveChunks() => _loadedChunks.Values;
+    public IEnumerable<Chunk> GetDirtyChunks()
+    {
+        foreach (Chunk chunk in _loadedChunks.Values)
+        {
+            if (chunk.IsDirty)
+                yield return chunk;
+        }
+    }
 
     public bool IsSolid(Vector3 pos)
     {
