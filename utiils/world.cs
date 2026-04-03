@@ -9,19 +9,49 @@ public class World
     private readonly Dictionary<(int, int), Chunk> _loadedChunks = new();
     private readonly Perlin _noise;
     private readonly int _seed;
+
+    public  float[] _instancePositions;
+    public  uint[] _instanceData;
     public int RenderDistance = 4; // Chunks in each direction
 
     public World(int seed)
     {
         _seed = seed;
         _noise = new Perlin(new DeterministicRandom(seed));
+
+        var posList = new List<float>();
+        var dataList = new List<uint>();
+        _instancePositions = posList.ToArray();
+        _instanceData = dataList.ToArray();
+        foreach (var chunk in GetActiveChunks())
+    {
+        for (int x = 0; x < Chunk.SizeX; x++)
+        {
+            for (int z = 0; z < Chunk.SizeZ; z++)
+            {
+                for (int y = 0; y < Chunk.Height; y++)
+                {
+                    Voxel voxel = chunk.Voxels[x + Chunk.SizeX * (y + Chunk.Height * z)];
+                    if (voxel.Data == 0) continue; // Skip empty/air voxels
+
+                    // Scale instance positions by 0.5 to pack them tighter
+                    posList.Add((chunk.ChunkX * Chunk.SizeX + x) * 0.5f);
+                    posList.Add(y * 0.5f);
+                    posList.Add((chunk.ChunkZ * Chunk.SizeZ + z) * 0.5f);
+                    dataList.Add(voxel.Data);
+                    
+                    Console.WriteLine($"Added voxel at ({chunk.ChunkX * Chunk.SizeX + x}, {y}, {chunk.ChunkZ * Chunk.SizeZ + z}) with type {voxel.Data}");
+                }
+            }
+        }
+    }
     }
 
     public void Update(Vector3 playerPos)
     {
         int pCx = (int)Math.Floor(playerPos.X / Chunk.SizeX);
         int pCz = (int)Math.Floor(playerPos.Z / Chunk.SizeZ);
-
+        Console.WriteLine($"Player is at chunk ({pCx}, {pCz})");
         // Load chunks in range
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
