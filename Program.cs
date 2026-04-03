@@ -4,7 +4,8 @@ using Silk.NET.Input;
 using System.Numerics; // Required for Matrix4x4
 using System.Drawing;
 using System.IO;
-using VoxEngine.Utils; // Import our new namespace
+using VoxEngine.Utils;
+using System.ComponentModel; // Import our new namespace
 
 // 1. Setup Window Options
 var options = WindowOptions.Default;
@@ -20,6 +21,7 @@ float targetAlteredState = 0f;
 float currentAlteredState = 0f;
 Vector2 lastMousePos;
 World world = null!;
+bool worldDirty = true; // Flag to track if world data has changed
 void ToggleAlteredState() => targetAlteredState = targetAlteredState == 0f ? 1f : 0f;
 
 window.Load += () =>
@@ -95,7 +97,7 @@ window.Load += () =>
         // 2. Initialize World Manager
         world = new World(DateOnly.FromDateTime(DateTime.Now).DayNumber);
         world.Update(camera.Position);
-
+        worldDirty = false; // Initial load done, reset dirty flag
 
 
         uint vertexArrayOutput = gl.GenVertexArray();
@@ -197,7 +199,7 @@ window.Load += () =>
                     d,
                     BufferUsageARB.DynamicDraw);
             }
-            
+            worldDirty = false;
             // Instanced Draw: 36 indices per cube
             gl.DrawElementsInstanced(PrimitiveType.Triangles, 36, DrawElementsType.UnsignedInt, (void*)0, instanceCount);
         };
@@ -210,7 +212,11 @@ window.Update += (double delta) =>
     {
         camera.OnUpdate(delta, input.Keyboards[0]);
     }
-    world.Update(camera.Position);;
+
+    bool changed = world.Update(camera.Position);
+
+    if (changed)
+        worldDirty = true;    
 };
 
 window.Run();

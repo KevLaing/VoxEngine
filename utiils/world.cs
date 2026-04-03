@@ -47,10 +47,11 @@ public class World
     }
     }
 
-    public void Update(Vector3 playerPos)
+    public bool Update(Vector3 playerPos)
     {
         int pCx = (int)Math.Floor(playerPos.X / Chunk.SizeX);
         int pCz = (int)Math.Floor(playerPos.Z / Chunk.SizeZ);
+        bool changed = false;
         Console.WriteLine($"Player is at chunk ({pCx}, {pCz})");
         // Load chunks in range
         for (int x = -RenderDistance; x <= RenderDistance; x++)
@@ -62,6 +63,7 @@ public class World
                 if (!_loadedChunks.ContainsKey((cx, cz)))
                 {
                     _loadedChunks.Add((cx, cz), new Chunk(cx, cz, _seed, _noise));
+                    changed = true;
                 }
             }
         }
@@ -74,9 +76,11 @@ public class World
                 Math.Abs(coord.Item2 - pCz) > RenderDistance + 1)
             {
                 toUnload.Add(coord);
+                changed = true;
             }
         }
         foreach (var coord in toUnload) _loadedChunks.Remove(coord);
+        return changed;
     }
 
     public IEnumerable<Chunk> GetActiveChunks() => _loadedChunks.Values;
