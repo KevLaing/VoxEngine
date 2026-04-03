@@ -58,8 +58,9 @@ window.Load += () =>
 
         gl.Viewport(0, 0, (uint)window.Size.X, (uint)window.Size.Y);
         gl.Enable(EnableCap.DepthTest);
-        //.Enable(EnableCap.Blend);
-        //gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        gl.Enable(EnableCap.Blend);
+        
+        gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
         window.FramebufferResize += s =>
             gl.Viewport(0, 0, (uint)s.X, (uint)s.Y);
@@ -149,22 +150,22 @@ window.Load += () =>
 
             foreach (var chunk in world.GetActiveChunks())
             {
+                 if (chunk.IsDirty)
+                    chunk.BuildMesh(gl, world);
+                    chunk.IsDirty = false;
+            }
+            foreach (var chunk in world.GetActiveChunks())
+            {
                 if (!FrustumCuller.IntersectsAabb(viewProj, chunk.BoundsMin, chunk.BoundsMax))
                 {
                     culledChunks++;
                     continue;
                 }
-                
+
                 visibleChunks++;
 
-                if (chunk.IsDirty)
-                {
-                    chunk.BuildMesh(gl, world);
+               
 
-                    Console.WriteLine($"Chunk {chunk.ChunkX},{chunk.ChunkZ} IndexCount={chunk.IndexCount}");
-
-                    break;
-                }
 
                 if (chunk.IndexCount == 0)
                     continue;

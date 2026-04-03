@@ -49,22 +49,29 @@ public class World
         int pCz = (int)Math.Floor(playerPos.Z / Chunk.SizeZ);
         bool changed = false;
 
-        // Load chunks in range
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
             for (int z = -RenderDistance; z <= RenderDistance; z++)
             {
                 int cx = pCx + x;
                 int cz = pCz + z;
+
                 if (!_loadedChunks.ContainsKey((cx, cz)))
                 {
-                    _loadedChunks.Add((cx, cz), new Chunk(cx, cz, _seed, _noise));
+                    var chunk = new Chunk(cx, cz, _seed, _noise);
+                    chunk.IsDirty = true;
+                    _loadedChunks.Add((cx, cz), chunk);
+
+                    MarkNeighborDirty(cx - 1, cz);
+                    MarkNeighborDirty(cx + 1, cz);
+                    MarkNeighborDirty(cx, cz - 1);
+                    MarkNeighborDirty(cx, cz + 1);
+
                     changed = true;
                 }
             }
         }
 
-        // Optional: Unload chunks too far away
         var toUnload = new List<(int, int)>();
         foreach (var coord in _loadedChunks.Keys)
         {
@@ -75,8 +82,24 @@ public class World
                 changed = true;
             }
         }
-        foreach (var coord in toUnload) _loadedChunks.Remove(coord);
+
+        foreach (var coord in toUnload)
+        {
+            _loadedChunks.Remove(coord);
+
+            MarkNeighborDirty(coord.Item1 - 1, coord.Item2);
+            MarkNeighborDirty(coord.Item1 + 1, coord.Item2);
+            MarkNeighborDirty(coord.Item1, coord.Item2 - 1);
+            MarkNeighborDirty(coord.Item1, coord.Item2 + 1);
+        }
+
         return changed;
+    }
+
+    private void MarkNeighborDirty(int cx, int cz)
+    {
+        if (_loadedChunks.TryGetValue((cx, cz), out var chunk))
+            chunk.IsDirty = true;
     }
 
     public IEnumerable<Chunk> GetActiveChunks() => _loadedChunks.Values;
