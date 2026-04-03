@@ -63,8 +63,8 @@ public class Camera
         if (keyboard.IsKeyPressed(Key.D)) Position += right * moveSpeed;
 
         // Elevation
-        if (keyboard.IsKeyPressed(Key.E)) Position += Up * moveSpeed;
-        if (keyboard.IsKeyPressed(Key.Space)) Position -= Up * moveSpeed;
+        if (keyboard.IsKeyPressed(Key.ControlLeft)) Position -= Up * moveSpeed;
+        if (keyboard.IsKeyPressed(Key.Space)) Position += Up * moveSpeed;
         
     }
 }

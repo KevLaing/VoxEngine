@@ -58,8 +58,8 @@ window.Load += () =>
 
         gl.Viewport(0, 0, (uint)window.Size.X, (uint)window.Size.Y);
         gl.Enable(EnableCap.DepthTest);
-        gl.Enable(EnableCap.Blend);
-        gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        //.Enable(EnableCap.Blend);
+        //gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
 
         window.FramebufferResize += s =>
             gl.Viewport(0, 0, (uint)s.X, (uint)s.Y);
@@ -107,7 +107,7 @@ window.Load += () =>
 
         gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
         gl.EnableVertexAttribArray(0);
-
+        gl.ClearColor(0.2f, 0.3f, 0.5f, 1.0f);
         uint sharedEBO = gl.GenBuffer();
         gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, sharedEBO);
         fixed (uint* i = indices)
@@ -122,6 +122,8 @@ window.Load += () =>
         {
             gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
+            gl.UseProgram(program);
+
             var view = camera.GetViewMatrix();
             var proj = Matrix4x4.CreatePerspectiveFieldOfView(
                 75f * (MathF.PI / 180f),
@@ -129,11 +131,18 @@ window.Load += () =>
                 0.1f,
                 175f);
 
-            // Keep the same convention you're already rendering with.
             var viewProj = view * proj;
 
             int uMVP = gl.GetUniformLocation(program, "uMVP");
             gl.UniformMatrix4(uMVP, 1, false, (float*)&viewProj);
+
+            float lerpSpeed = 5.0f;
+            currentAlteredState += (targetAlteredState - currentAlteredState) * (float)delta * lerpSpeed;
+
+            int loc = gl.GetUniformLocation(program, "uAlteredState");
+            gl.Uniform1(loc, currentAlteredState);
+
+            // draw chunks here
 
             int visibleChunks = 0;
             int culledChunks = 0;
@@ -145,32 +154,30 @@ window.Load += () =>
                     culledChunks++;
                     continue;
                 }
-
+                
                 visibleChunks++;
 
                 if (chunk.IsDirty)
-                    chunk.BuildMesh(gl, cubeVBO, sharedEBO);
+                {
+                    chunk.BuildMesh(gl, world);
 
-                if (chunk.InstanceCount == 0)
+                    Console.WriteLine($"Chunk {chunk.ChunkX},{chunk.ChunkZ} IndexCount={chunk.IndexCount}");
+
+                    break;
+                }
+
+                if (chunk.IndexCount == 0)
                     continue;
 
                 gl.BindVertexArray(chunk.VAO);
-                gl.DrawElementsInstanced(
+                gl.DrawElements(
                     PrimitiveType.Triangles,
-                    36,
+                    chunk.IndexCount,
                     DrawElementsType.UnsignedInt,
-                    (void*)0,
-                    chunk.InstanceCount);
+                    null);
             }
 
-            float lerpSpeed = 5.0f;
-            currentAlteredState += (targetAlteredState - currentAlteredState) * (float)delta * lerpSpeed;
-
-            int loc = gl.GetUniformLocation(program, "uAlteredState");
-            gl.Uniform1(loc, currentAlteredState);
-
-            // Temporary debug:
-             Console.WriteLine($"Visible: {visibleChunks}, Culled: {culledChunks}");
+            Console.WriteLine($"Visible: {visibleChunks}, Culled: {culledChunks}");
         };
     }
 };

@@ -19,11 +19,75 @@ public class Chunk
     public Vector3 BoundsMax { get; }
 
     public uint VAO;
-    public uint InstanceVBO;
+    public uint VertexVBO;
     public uint DataVBO;
-    public uint InstanceCount;
+    public uint EBO;
+    public uint IndexCount;
     public bool IsDirty = true;
 
+    //meshing helpers
+
+    private int IndexOf(int x, int y, int z)
+    => x + SizeX * (y + Height * z);
+
+    public bool InBounds(int x, int y, int z)
+        => x >= 0 && x < SizeX &&
+           y >= 0 && y < Height &&
+           z >= 0 && z < SizeZ;
+
+    public bool IsSolidLocal(int x, int y, int z)
+    {
+        if (!InBounds(x, y, z)) return false;
+        return Voxels[IndexOf(x, y, z)].Data != 0;
+    }
+    private bool IsSolidWorld(World world, int localX, int localY, int localZ)
+    {
+        if (localY < 0 || localY >= Height)
+            return false;
+
+        if (localX >= 0 && localX < SizeX &&
+            localZ >= 0 && localZ < SizeZ)
+        {
+            return Voxels[IndexOf(localX, localY, localZ)].Data != 0;
+        }
+
+        int worldX = ChunkX * SizeX + localX;
+        int worldZ = ChunkZ * SizeZ + localZ;
+
+        return world.IsSolid(worldX, localY, worldZ);
+    }
+    public uint GetVoxelDataLocal(int x, int y, int z)
+    {
+        if (!InBounds(x, y, z)) return 0;
+        return Voxels[IndexOf(x, y, z)].Data;
+    }
+    private static void AddQuad(
+    List<float> vertices,
+    List<uint> voxelData,
+    List<uint> indices,
+    Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3,
+    uint data)
+    {
+        uint baseIndex = (uint)(vertices.Count / 3);
+
+        vertices.Add(v0.X); vertices.Add(v0.Y); vertices.Add(v0.Z);
+        vertices.Add(v1.X); vertices.Add(v1.Y); vertices.Add(v1.Z);
+        vertices.Add(v2.X); vertices.Add(v2.Y); vertices.Add(v2.Z);
+        vertices.Add(v3.X); vertices.Add(v3.Y); vertices.Add(v3.Z);
+
+        voxelData.Add(data);
+        voxelData.Add(data);
+        voxelData.Add(data);
+        voxelData.Add(data);
+
+        indices.Add(baseIndex + 0);
+        indices.Add(baseIndex + 1);
+        indices.Add(baseIndex + 2);
+        indices.Add(baseIndex + 2);
+        indices.Add(baseIndex + 3);
+        indices.Add(baseIndex + 0);
+    }
+    // Chunk constructor
     public Chunk(int cx, int cz, int worldSeed, Perlin noise)
     {
         ChunkX = cx;
@@ -39,27 +103,103 @@ public class Chunk
         Generate(noise, rand);
     }
 
-    public unsafe void BuildMesh(GL gl, uint cubeVBO, uint sharedEBO)
+    public unsafe void BuildMesh(GL gl, World world)
     {
-        var posList = new List<float>();
-        var dataList = new List<uint>();
+        var vertices = new List<float>();
+        var voxelData = new List<uint>();
+        var indices = new List<uint>();
 
         for (int x = 0; x < SizeX; x++)
-        for (int z = 0; z < SizeZ; z++)
-        for (int y = 0; y < Height; y++)
         {
-            var voxel = Voxels[x + SizeX * (y + Height * z)];
-            if (voxel.Data == 0) continue;
+            for (int y = 0; y < Height; y++)
+            {
+                for (int z = 0; z < SizeZ; z++)
+                {
+                    uint data = GetVoxelDataLocal(x, y, z);
+                    if (data == 0) continue;
 
-            posList.Add(ChunkX * SizeX + x);
-            posList.Add(y);
-            posList.Add(ChunkZ * SizeZ + z);
-            dataList.Add(voxel.Data);
+                    float wx = ChunkX * SizeX + x;
+                    float wy = y;
+                    float wz = ChunkZ * SizeZ + z;
+
+                    // -X
+                    if (!IsSolidWorld(world, x - 1, y, z))
+                    {
+                        AddQuad(
+                            vertices, voxelData, indices,
+                            new Vector3(wx, wy, wz),
+                            new Vector3(wx, wy + 1, wz),
+                            new Vector3(wx, wy + 1, wz + 1),
+                            new Vector3(wx, wy, wz + 1),
+                            data);
+                    }
+
+                    // +X
+                    if (!IsSolidWorld(world, x + 1, y, z))
+                    {
+                        AddQuad(
+                            vertices, voxelData, indices,
+                            new Vector3(wx + 1, wy, wz + 1),
+                            new Vector3(wx + 1, wy + 1, wz + 1),
+                            new Vector3(wx + 1, wy + 1, wz),
+                            new Vector3(wx + 1, wy, wz),
+                            data);
+                    }
+
+                    // -Y
+                    if (!IsSolidWorld(world, x, y - 1, z))
+                    {
+                        AddQuad(
+                            vertices, voxelData, indices,
+                            new Vector3(wx, wy, wz + 1),
+                            new Vector3(wx + 1, wy, wz + 1),
+                            new Vector3(wx + 1, wy, wz),
+                            new Vector3(wx, wy, wz),
+                            data);
+                    }
+
+                    // +Y
+                    if (!IsSolidWorld(world, x, y + 1, z))
+                    {
+                        AddQuad(
+                            vertices, voxelData, indices,
+                            new Vector3(wx, wy + 1, wz),
+                            new Vector3(wx + 1, wy + 1, wz),
+                            new Vector3(wx + 1, wy + 1, wz + 1),
+                            new Vector3(wx, wy + 1, wz + 1),
+                            data);
+                    }
+
+                    // -Z
+                    if (!IsSolidWorld(world, x, y, z - 1))
+                    {
+                        AddQuad(
+                            vertices, voxelData, indices,
+                            new Vector3(wx + 1, wy, wz),
+                            new Vector3(wx + 1, wy + 1, wz),
+                            new Vector3(wx, wy + 1, wz),
+                            new Vector3(wx, wy, wz),
+                            data);
+                    }
+
+                    // +Z
+                    if (!IsSolidWorld(world, x, y, z + 1))
+                    {
+                        AddQuad(
+                            vertices, voxelData, indices,
+                            new Vector3(wx, wy, wz + 1),
+                            new Vector3(wx, wy + 1, wz + 1),
+                            new Vector3(wx + 1, wy + 1, wz + 1),
+                            new Vector3(wx + 1, wy, wz + 1),
+                            data);
+                    }
+                }
+            }
         }
 
-        InstanceCount = (uint)dataList.Count;
+        IndexCount = (uint)indices.Count;
 
-        if (InstanceCount == 0)
+        if (IndexCount == 0)
         {
             IsDirty = false;
             return;
@@ -68,41 +208,40 @@ public class Chunk
         if (VAO == 0)
         {
             VAO = gl.GenVertexArray();
+            VertexVBO = gl.GenBuffer();
+            DataVBO = gl.GenBuffer();
+            EBO = gl.GenBuffer();
+
             gl.BindVertexArray(VAO);
 
-            gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, sharedEBO);
-
-            gl.BindBuffer(BufferTargetARB.ArrayBuffer, cubeVBO);
+            // position attribute
+            gl.BindBuffer(BufferTargetARB.ArrayBuffer, VertexVBO);
             gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
             gl.EnableVertexAttribArray(0);
 
-            InstanceVBO = gl.GenBuffer();
-            gl.BindBuffer(BufferTargetARB.ArrayBuffer, InstanceVBO);
-            gl.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
-            gl.VertexAttribDivisor(1, 1);
+            // packed voxel data attribute
+            gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
+            gl.VertexAttribIPointer(1, 1, VertexAttribIType.UnsignedInt, sizeof(uint), (void*)0);
             gl.EnableVertexAttribArray(1);
 
-            DataVBO = gl.GenBuffer();
-            gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
-            gl.VertexAttribIPointer(2, 1, VertexAttribIType.UnsignedInt, sizeof(uint), (void*)0);
-            gl.VertexAttribDivisor(2, 1);
-            gl.EnableVertexAttribArray(2);
+            // element buffer
+            gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, EBO);
         }
 
         gl.BindVertexArray(VAO);
 
-        var posArray = posList.ToArray();
-        gl.BindBuffer(BufferTargetARB.ArrayBuffer, InstanceVBO);
-        fixed (float* p = posArray)
+        var vertexArray = vertices.ToArray();
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, VertexVBO);
+        fixed (float* v = vertexArray)
         {
             gl.BufferData(
                 BufferTargetARB.ArrayBuffer,
-                (nuint)(posArray.Length * sizeof(float)),
-                p,
+                (nuint)(vertexArray.Length * sizeof(float)),
+                v,
                 BufferUsageARB.DynamicDraw);
         }
 
-        var dataArray = dataList.ToArray();
+        var dataArray = voxelData.ToArray();
         gl.BindBuffer(BufferTargetARB.ArrayBuffer, DataVBO);
         fixed (uint* d = dataArray)
         {
@@ -113,8 +252,20 @@ public class Chunk
                 BufferUsageARB.DynamicDraw);
         }
 
+        var indexArray = indices.ToArray();
+        gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, EBO);
+        fixed (uint* i = indexArray)
+        {
+            gl.BufferData(
+                BufferTargetARB.ElementArrayBuffer,
+                (nuint)(indexArray.Length * sizeof(uint)),
+                i,
+                BufferUsageARB.DynamicDraw);
+        }
+
         IsDirty = false;
     }
+
 
     private void Generate(Perlin noise, DeterministicRandom rand)
     {
