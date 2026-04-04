@@ -9,15 +9,15 @@ public sealed class PlayerController
     public const float ColliderRadius = 0.35f;
     public const float ColliderHeight = 1.80f;
     public const float EyeHeight = 1.65f;
-    public const float MaxStepHeight = 0.50f;
+    public const float MaxStepHeight = 1.0f;
 
-    private const float WalkSpeed = 5.0f;
-    private const float SprintSpeed = 7.0f;
+    private const float WalkSpeed = 15.0f;
+    private const float SprintSpeed = 27.0f;
     private const float GroundAcceleration = 30.0f;
     private const float AirAcceleration = 10.0f;
     private const float GroundFriction = 12.0f;
     private const float Gravity = 20.0f;
-    private const float JumpHeight = 1.10f;
+    private const float JumpHeight = 10.10f;
     private const float TerminalVelocity = 40.0f;
     private const float MouseSensitivity = 0.0025f;
     private const float MaxPitch = 1.55f;

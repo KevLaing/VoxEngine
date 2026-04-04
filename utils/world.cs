@@ -8,8 +8,8 @@ namespace VoxEngine.Utils;
 public class World
 {
     private readonly Dictionary<(int, int), Chunk> _loadedChunks = new();
-    private readonly Perlin _noise;
     private readonly int _seed;
+    private readonly TerrainSampler _terrainSampler;
     private static readonly (int X, int Z)[] CardinalNeighborOffsets =
     {
         (-1, 0),
@@ -25,7 +25,7 @@ public class World
     public World(int seed)
     {
         _seed = seed;
-        _noise = new Perlin(new DeterministicRandom(seed));
+        _terrainSampler = new TerrainSampler(seed);
 
         var posList = new List<float>();
         var dataList = new List<uint>();
@@ -128,7 +128,7 @@ public class World
 
     private void AddChunk(int cx, int cz)
     {
-        var chunk = new Chunk(cx, cz, _seed, _noise)
+        var chunk = new Chunk(cx, cz, _seed, _terrainSampler)
         {
             IsDirty = true
         };

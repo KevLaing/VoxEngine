@@ -64,7 +64,7 @@ public sealed class VoxelRenderer : IDisposable
             75f * (MathF.PI / 180f),
             (float)_window.Size.X / _window.Size.Y,
             0.1f,
-            175f);
+            900f);
 
         Matrix4x4 viewProjection = view * projection;
 

@@ -9,7 +9,7 @@ public class Chunk
 {
     public const int SizeX = 32;
     public const int SizeZ = 32;
-    public const int Height = 128;
+    public const int Height = 512;
 
     public int ChunkX { get; }
     public int ChunkZ { get; }
@@ -89,7 +89,7 @@ public class Chunk
         indices.Add(baseIndex + 0);
     }
     // Chunk constructor
-    public Chunk(int cx, int cz, int worldSeed, Perlin noise)
+    public Chunk(int cx, int cz, int worldSeed, TerrainSampler terrainSampler)
     {
         ChunkX = cx;
         ChunkZ = cz;
@@ -101,7 +101,7 @@ public class Chunk
         int chunkSeed = worldSeed ^ (cx * 73856093) ^ (cz * 19349663);
         var rand = new DeterministicRandom(chunkSeed);
 
-        Generate(noise, rand);
+        Generate(terrainSampler, rand);
     }
 
     public unsafe void BuildMesh(GL gl, World world)
@@ -297,19 +297,17 @@ public class Chunk
     }
 
 
-    private void Generate(Perlin noise, DeterministicRandom rand)
+    private void Generate(TerrainSampler terrainSampler, DeterministicRandom rand)
     {
-        int waterLevel = 28;
-
         for (int x = 0; x < SizeX; x++)
         {
             for (int z = 0; z < SizeZ; z++)
             {
-                double worldX = (ChunkX * SizeX) + x;
-                double worldZ = (ChunkZ * SizeZ) + z;
-
-                double nHeight = noise.Noise(worldX * 0.025, worldZ * 0.025, 0.0);
-                int terrainHeight = (int)((nHeight * 0.5 + 0.5) * 60) + 8;
+                int worldX = (ChunkX * SizeX) + x;
+                int worldZ = (ChunkZ * SizeZ) + z;
+                TerrainSample sample = terrainSampler.SampleColumn(worldX, worldZ);
+                int terrainHeight = sample.SurfaceHeight;
+                byte moisture = (byte)Math.Clamp((int)(sample.Moisture * 255f), 0, 255);
 
                 for (int y = 0; y < Height; y++)
                 {
@@ -317,25 +315,55 @@ public class Chunk
 
                     if (y < terrainHeight)
                     {
-                        if (y == terrainHeight - 1)
-                            type = (terrainHeight <= waterLevel + 1) ? 4u : 1u;
-                        else
-                            type = 2u;
+                        type = SelectTerrainMaterial(sample, terrainHeight, y);
                     }
-                    else if (y < waterLevel)
+                    else if (y < TerrainSampler.WaterLevel)
                     {
                         type = 3u;
                     }
                     else break;
 
                     byte growth = (byte)rand.Next(256);
-                    byte moisture = (byte)rand.Next(256);
-
                     Voxels[x + SizeX * (y + Height * z)] = new Voxel(type, growth, moisture);
                 }
             }
         }
 
         IsDirty = true;
+    }
+
+    private static uint SelectTerrainMaterial(TerrainSample sample, int terrainHeight, int y)
+    {
+        int depthFromSurface = terrainHeight - 1 - y;
+        bool isSurface = depthFromSurface == 0;
+        bool isShoreline = terrainHeight <= TerrainSampler.WaterLevel + 2;
+        bool isSnow = ShouldPlaceSnow(sample, terrainHeight, depthFromSurface);
+
+        return sample.Biome switch
+        {
+            BiomeType.Forest => isSurface ? (isShoreline ? 4u : 1u) : 2u,
+            BiomeType.Plains => isSurface ? ((sample.Moisture < 0.38f || isShoreline) ? 4u : 1u) : 2u,
+            BiomeType.RockyFoothills => isSurface && depthFromSurface <= 1 && !isShoreline ? 1u : 2u,
+            BiomeType.Mountain => isSnow ? 5u : 2u,
+            BiomeType.Fjord => isSurface ? 4u : 2u,
+            _ => 2u,
+        };
+    }
+
+    private static bool ShouldPlaceSnow(TerrainSample sample, int terrainHeight, int depthFromSurface)
+    {
+        if (sample.Biome != BiomeType.Mountain)
+            return false;
+
+        float snowLine = 190f - sample.Moisture * 18f - (1f - sample.Temperature) * 16f;
+        float snowCoverage = Math.Clamp((terrainHeight - snowLine) / 70f, 0f, 1f);
+
+        if (snowCoverage <= 0f)
+            return false;
+
+        if (depthFromSurface == 0)
+            return snowCoverage > 0.12f;
+
+        return depthFromSurface == 1 && snowCoverage > 0.70f;
     }
 }

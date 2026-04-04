@@ -20,15 +20,14 @@ void main() {
     vec3 baseColor;
 
     // Debug: Force white for everything below the water line (14.0)
-    if (vWorldY < 14.0) {
-        baseColor = vec3(1.0, 1.0, 1.0);
-    } else {
-        if (vType == 1u) baseColor = vec3(0.2, 0.6, 0.2);      // Grass
-        else if (vType == 2u) baseColor = vec3(0.6, 0.4, 0.2); // Dirt/Soil
-        else if (vType == 3u) baseColor = vec3(0.0, 0.3, 0.8); // Water
-        else if (vType == 4u) baseColor = vec3(0.9, 0.8, 0.5); // Sand
-        else baseColor = vec3(1.0, 1.0, 1.0);
-    }
+    
+    if (vType == 1u) baseColor = vec3(0.2, 0.6, 0.2);      // Grass
+    else if (vType == 2u) baseColor = vec3(0.6, 0.4, 0.2); // Dirt/Soil
+    else if (vType == 3u) baseColor = vec3(0.0, 0.3, 0.8); // Water
+    else if (vType == 4u) baseColor = vec3(0.9, 0.8, 0.5); // Sand
+    else if (vType == 5u) baseColor = vec3(0.92, 0.95, 1.0); // Snow
+    else baseColor = vec3(1.0, 1.0, 1.0);
+    
 
     // Visualize Growth (Brightness) and Moisture (Blue Tint)
     vec3 normalColor = baseColor * (0.5 + 0.5 * vGrowth); 
