@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Security.Cryptography;
 using Silk.NET.Windowing;
 using VoxEngine.Utils;
 
@@ -14,6 +15,7 @@ public sealed class Game : IDisposable
     private readonly InputController _inputController;
     private readonly ChunkMeshingScheduler _meshingScheduler;
     private PlayerController? _player;
+    private readonly long _worldSeed;
 
     private float _targetAlteredState;
     private float _currentAlteredState;
@@ -23,7 +25,8 @@ public sealed class Game : IDisposable
     {
         _window = window;
         _camera = new Camera(new Vector3(30, 20, 30), Vector3.Zero);
-        _world = new World(DateOnly.FromDateTime(DateTime.Now).DayNumber);
+        _worldSeed = CreateRandomSeed();
+        _world = new World((int)(_worldSeed % int.MaxValue));
         _renderer = new VoxelRenderer(window);
         _inputController = new InputController(window, ToggleAlteredState);
         _meshingScheduler = new ChunkMeshingScheduler(1);
@@ -39,6 +42,7 @@ public sealed class Game : IDisposable
     {
         _inputController.Initialize();
         _renderer.Initialize();
+        Console.WriteLine($"World Seed: {_worldSeed}");
 
         _world.Update(new Vector3(InitialSpawnXZ.X, 0f, InitialSpawnXZ.Y), _renderer.Gl);
         _player = CreatePlayer();
@@ -92,5 +96,13 @@ public sealed class Game : IDisposable
     {
         _renderer.Dispose();
         _inputController.Dispose();
+    }
+
+    private static long CreateRandomSeed()
+    {
+        Span<byte> bytes = stackalloc byte[8];
+        RandomNumberGenerator.Fill(bytes);
+        ulong raw = BitConverter.ToUInt64(bytes);
+        return 1_000_000_000L + (long)(raw % 9_000_000_000UL);
     }
 }

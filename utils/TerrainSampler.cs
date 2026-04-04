@@ -13,14 +13,14 @@ public sealed class TerrainSampler
     private const float TemperatureFrequency = 0.0010f;
     private const float MoistureFrequency = 0.0011f;
     private const float BroadTerrainFrequency = 0.0018f;
-    private const float RollingTerrainFrequency = 0.0040f;
+    private const float RollingTerrainFrequency = 0.020f;
     private const float DetailFrequency = 0.0100f;
     private const float MountainRidgeFrequency = 0.0100f;
 
     private const float BaseTerrainHeight = 39f;
-    private const float BroadTerrainAmplitude = 4.0f;
-    private const float RollingTerrainAmplitude = 3.0f;
-    private const float DetailAmplitude = 1.5f;
+    private const float BroadTerrainAmplitude = 10.0f;
+    private const float RollingTerrainAmplitude = 8.0f;
+    private const float DetailAmplitude = 2.5f;
 
     private const float CoastNearestOffsetSouth = 180f;
     private const float CoastArcRadius = 1500f;
