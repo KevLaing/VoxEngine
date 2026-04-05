@@ -9,7 +9,7 @@ public sealed class PlayerController
     public const float ColliderRadius = 0.35f;
     public const float ColliderHeight = 1.80f;
     public const float EyeHeight = 1.65f;
-    public const float MaxStepHeight = 1.0f;
+    public const float MaxStepHeight = 10.0f;
 
     private const float WalkSpeed = 15.0f;
     private const float SprintSpeed = 27.0f;

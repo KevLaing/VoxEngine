@@ -39,23 +39,25 @@ public class Chunk
     public bool IsSolidLocal(int x, int y, int z)
     {
         if (!InBounds(x, y, z)) return false;
-        return Voxels[IndexOf(x, y, z)].Data != 0;
+        uint voxelType = Voxels[IndexOf(x, y, z)].Type;
+        return voxelType != 0 && voxelType != World.WaterVoxelType;
     }
-    private bool IsSolidWorld(World world, int localX, int localY, int localZ)
+
+    private uint GetVoxelTypeWorld(World world, int localX, int localY, int localZ)
     {
         if (localY < 0 || localY >= Height)
-            return false;
+            return 0;
 
         if (localX >= 0 && localX < SizeX &&
             localZ >= 0 && localZ < SizeZ)
         {
-            return Voxels[IndexOf(localX, localY, localZ)].Data != 0;
+            return Voxels[IndexOf(localX, localY, localZ)].Type;
         }
 
         int worldX = ChunkX * SizeX + localX;
         int worldZ = ChunkZ * SizeZ + localZ;
 
-        return world.IsSolid(worldX, localY, worldZ);
+        return world.GetVoxelType(worldX, localY, worldZ);
     }
     public uint GetVoxelDataLocal(int x, int y, int z)
     {
@@ -118,13 +120,14 @@ public class Chunk
                 {
                     uint data = GetVoxelDataLocal(x, y, z);
                     if (data == 0) continue;
+                    uint voxelType = data & 0xFFFFu;
 
                     float wx = ChunkX * SizeX + x;
                     float wy = y;
                     float wz = ChunkZ * SizeZ + z;
 
                     // -X
-                    if (!IsSolidWorld(world, x - 1, y, z))
+                    if (ShouldRenderFace(voxelType, GetVoxelTypeWorld(world, x - 1, y, z), FaceDirection.Side))
                     {
                         AddQuad(
                             vertices, voxelData, indices,
@@ -136,7 +139,7 @@ public class Chunk
                     }
 
                     // +X
-                    if (!IsSolidWorld(world, x + 1, y, z))
+                    if (ShouldRenderFace(voxelType, GetVoxelTypeWorld(world, x + 1, y, z), FaceDirection.Side))
                     {
                         AddQuad(
                             vertices, voxelData, indices,
@@ -148,7 +151,7 @@ public class Chunk
                     }
 
                     // -Y
-                    if (!IsSolidWorld(world, x, y - 1, z))
+                    if (ShouldRenderFace(voxelType, GetVoxelTypeWorld(world, x, y - 1, z), FaceDirection.Bottom))
                     {
                         AddQuad(
                             vertices, voxelData, indices,
@@ -160,7 +163,7 @@ public class Chunk
                     }
 
                     // +Y
-                    if (!IsSolidWorld(world, x, y + 1, z))
+                    if (ShouldRenderFace(voxelType, GetVoxelTypeWorld(world, x, y + 1, z), FaceDirection.Top))
                     {
                         AddQuad(
                             vertices, voxelData, indices,
@@ -172,7 +175,7 @@ public class Chunk
                     }
 
                     // -Z
-                    if (!IsSolidWorld(world, x, y, z - 1))
+                    if (ShouldRenderFace(voxelType, GetVoxelTypeWorld(world, x, y, z - 1), FaceDirection.Side))
                     {
                         AddQuad(
                             vertices, voxelData, indices,
@@ -184,7 +187,7 @@ public class Chunk
                     }
 
                     // +Z
-                    if (!IsSolidWorld(world, x, y, z + 1))
+                    if (ShouldRenderFace(voxelType, GetVoxelTypeWorld(world, x, y, z + 1), FaceDirection.Side))
                     {
                         AddQuad(
                             vertices, voxelData, indices,
@@ -307,6 +310,7 @@ public class Chunk
                 int worldZ = (ChunkZ * SizeZ) + z;
                 TerrainSample sample = terrainSampler.SampleColumn(worldX, worldZ);
                 int terrainHeight = sample.SurfaceHeight;
+                int waterHeight = sample.WaterSurfaceHeight;
                 byte moisture = (byte)Math.Clamp((int)(sample.Moisture * 255f), 0, 255);
 
                 for (int y = 0; y < Height; y++)
@@ -317,7 +321,7 @@ public class Chunk
                     {
                         type = SelectTerrainMaterial(sample, terrainHeight, y);
                     }
-                    else if (y < TerrainSampler.WaterLevel)
+                    else if (y < waterHeight)
                     {
                         type = 3u;
                     }
@@ -332,17 +336,35 @@ public class Chunk
         IsDirty = true;
     }
 
+    private static bool ShouldRenderFace(uint voxelType, uint neighborType, FaceDirection direction)
+    {
+        bool isWater = voxelType == World.WaterVoxelType;
+        bool neighborIsAir = neighborType == 0;
+        bool neighborIsWater = neighborType == World.WaterVoxelType;
+
+        if (isWater)
+        {
+            if (direction == FaceDirection.Bottom)
+                return neighborIsAir;
+
+            return !neighborIsWater;
+        }
+
+        return neighborIsAir || neighborIsWater;
+    }
+
     private static uint SelectTerrainMaterial(TerrainSample sample, int terrainHeight, int y)
     {
         int depthFromSurface = terrainHeight - 1 - y;
         bool isSurface = depthFromSurface == 0;
-        bool isShoreline = terrainHeight <= TerrainSampler.WaterLevel + 2;
+        bool isShoreline = terrainHeight <= sample.WaterSurfaceHeight + 2;
+        bool isRiverBank = sample.RiverMask > 0.20f && terrainHeight <= sample.WaterSurfaceHeight + 3;
         bool isSnow = ShouldPlaceSnow(sample, terrainHeight, depthFromSurface);
 
         return sample.Biome switch
         {
-            BiomeType.Forest => isSurface ? (isShoreline ? 4u : 1u) : 2u,
-            BiomeType.Plains => isSurface ? ((sample.Moisture < 0.38f || isShoreline) ? 4u : 1u) : 2u,
+            BiomeType.Forest => isSurface ? ((isShoreline || isRiverBank) ? 4u : 1u) : 2u,
+            BiomeType.Plains => isSurface ? ((sample.Moisture < 0.38f || isShoreline || isRiverBank) ? 4u : 1u) : 2u,
             BiomeType.RockyFoothills => isSurface && depthFromSurface <= 1 && !isShoreline ? 1u : 2u,
             BiomeType.Mountain => isSnow ? 5u : 2u,
             BiomeType.Fjord => isSurface ? 4u : 2u,
@@ -365,5 +387,12 @@ public class Chunk
             return snowCoverage > 0.12f;
 
         return depthFromSurface == 1 && snowCoverage > 0.70f;
+    }
+
+    private enum FaceDirection
+    {
+        Side,
+        Top,
+        Bottom,
     }
 }

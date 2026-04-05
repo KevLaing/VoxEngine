@@ -8,5 +8,7 @@ public readonly record struct TerrainSample(
     float BaseTerrain,
     float Detail,
     float FjordMask,
+    float RiverMask,
+    int WaterSurfaceHeight,
     int SurfaceHeight,
     BiomeType Biome);

@@ -7,6 +7,8 @@ namespace VoxEngine.Utils;
 
 public class World
 {
+    public const uint WaterVoxelType = 3u;
+
     private readonly Dictionary<(int, int), Chunk> _loadedChunks = new();
     private readonly int _seed;
     private readonly TerrainSampler _terrainSampler;
@@ -49,7 +51,28 @@ public class World
         if (localX < 0 || localX >= Chunk.SizeX || localZ < 0 || localZ >= Chunk.SizeZ)
             return false;
 
-        return chunk.Voxels[localX + Chunk.SizeX * (worldY + Chunk.Height * localZ)].Data != 0;
+        uint voxelType = chunk.Voxels[localX + Chunk.SizeX * (worldY + Chunk.Height * localZ)].Type;
+        return voxelType != 0 && voxelType != WaterVoxelType;
+    }
+
+    public uint GetVoxelType(int worldX, int worldY, int worldZ)
+    {
+        if (worldY < 0 || worldY >= Chunk.Height)
+            return 0;
+
+        int chunkX = (int)MathF.Floor((float)worldX / Chunk.SizeX);
+        int chunkZ = (int)MathF.Floor((float)worldZ / Chunk.SizeZ);
+
+        if (!_loadedChunks.TryGetValue((chunkX, chunkZ), out var chunk))
+            return 0;
+
+        int localX = worldX - chunkX * Chunk.SizeX;
+        int localZ = worldZ - chunkZ * Chunk.SizeZ;
+
+        if (localX < 0 || localX >= Chunk.SizeX || localZ < 0 || localZ >= Chunk.SizeZ)
+            return 0;
+
+        return chunk.Voxels[localX + Chunk.SizeX * (worldY + Chunk.Height * localZ)].Type;
     }
 
     public bool IntersectsSolidAabb(Vector3 min, Vector3 max)
